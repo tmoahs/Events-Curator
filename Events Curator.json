@@ -1,0 +1,365 @@
+{
+  "name": "Events Curator",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://app.ticketmaster.com/discovery/v2/events.json",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "=ZMgBALQZh6UI1BNUDNPqbZqtkGlzCPK4"
+            },
+            {
+              "name": "keyword",
+              "value": "={{ $json.Style }}"
+            },
+            {
+              "name": "city",
+              "value": "={{ $json.City }}"
+            },
+            {
+              "name": "size",
+              "value": "=20"
+            },
+            {
+              "name": "locale",
+              "value": "=*"
+            },
+            {
+              "name": "classificationName",
+              "value": "={{ $json.Category === 'Exhibitions' ? 'Arts & Theatre' : $json.Category === 'Theatre' ? 'Arts & Theatre' : $json.Category === 'Concerts' ? 'Music' : '' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        272,
+        -16
+      ],
+      "id": "417ab871-0b8f-4658-85e8-5ef38c69ce34",
+      "name": "GET Tickemaster API"
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "evenements",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        640,
+        -16
+      ],
+      "id": "843c1315-9c4e-4450-870a-662c7a567b94",
+      "name": "Aggregate"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.email }}",
+        "subject": "=Artistic Curation — {{ $now.format('dd/MM/yyyy') }}",
+        "message": "={{ $json.html }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1312,
+        -16
+      ],
+      "id": "d3bb684d-2ade-466f-a9b4-1a3774122f9f",
+      "name": "Send a message",
+      "webhookId": "9180b528-7243-4319-bb37-979c70f43ae6",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "7ibeEA0fNVLlxI3G",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "formTitle": "Events Curator",
+        "formDescription": "Find the events that suit you!",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Email",
+              "fieldType": "email",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "What town do you live in?",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Paris"
+                  },
+                  {
+                    "option": "London"
+                  },
+                  {
+                    "option": "New York"
+                  },
+                  {
+                    "option": "Berlin"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "What are you looking for?",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Exhibitions"
+                  },
+                  {
+                    "option": "Concerts"
+                  },
+                  {
+                    "option": "Theatre"
+                  },
+                  {
+                    "option": "Everything"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Please specify your style (e.g. Cubism, jazz, contemporary...)"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.5,
+      "position": [
+        -96,
+        -16
+      ],
+      "id": "2c2b0345-78cf-4c3e-9496-3b56258d87f8",
+      "name": "Form Trigger",
+      "webhookId": "98d36741-7389-48f9-a837-04b41eeac0e9"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyCVCNFMbiyx2TuTDsjasnJhr5lK6hgsVlI",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": {{ JSON.stringify(\"You are a cultural expert. Here are \" + $json.categorie + \" events for someone who enjoys \" + $json.style + \".\\n\\nFor each event, write an enthusiastic and personalized 3-sentence description.\\n\\nEvents:\\n\" + $json.liste + \"\\n\\nReply only in valid JSON: {\\\"evenements\\\": [{\\\"titre\\\": \\\"\\\", \\\"description\\\": \\\"\\\"}]}. No text before or after the JSON.\") }}\n        }\n      ]\n    }\n  ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        960,
+        -16
+      ],
+      "id": "c218c13c-a4fb-4ff4-b05f-77c5791995b7",
+      "name": "Gemini AI",
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Récupérer les descriptions de Gemini\nconst reponse = $input.first().json.candidates[0].content.parts[0].text;\nconst geminiData = JSON.parse(reponse.replace(/```json|```/g, '').trim());\n\n// Récupérer les événements Ticketmaster\nconst evenements = $('Aggregate').first().json.evenements;\nconst style = $('Field Mapping').first().json['Style'] || 'All styles';\nconst categorie = $('Field Mapping').first().json['Category'];\nconst ville = $('Field Mapping').first().json['City'];\n\n// Fusionner les deux sources\nconst eventsHTML = evenements.map((event, i) => {\n  const description = geminiData.evenements[i]?.description || '';\n  \n  return `\n  <div style=\"margin-bottom: 40px; border-bottom: 1px solid #e0d6c8; padding-bottom: 40px;\">\n    <img src=\"${event.image}\" alt=\"${event.titre}\"\n      onerror=\"this.style.display='none'\"\n      style=\"width: 100%; max-height: 250px; object-fit: cover; margin-bottom: 16px;\">\n    <h2 style=\"font-family: Georgia, serif; font-size: 20px; color: #1a1a1a; margin: 0 0 4px 0;\">\n      ${event.titre}\n    </h2>\n    <p style=\"font-family: Georgia, serif; font-size: 13px; color: #7a6a5a; margin: 0 0 12px 0;\">\n      ${event.lieu} — ${event.adresse} — ${event.dates}\n    </p>\n    <p style=\"font-family: Georgia, serif; font-size: 15px; color: #333; line-height: 1.7; margin: 0 0 16px 0;\">\n      ${description}\n    </p>\n    <a href=\"${event.lien}\"\n      style=\"font-family: Georgia, serif; font-size: 13px; color: #6b2737; text-decoration: underline;\">\n      Voir l'événement\n    </a>\n  </div>\n`}).join('');\n\nconst html = `\n<div style=\"max-width: 600px; margin: 0 auto; background: #fff; padding: 40px 32px;\">\n  <h1 style=\"font-family: Georgia, serif; font-size: 26px; color: #1a1a1a;\n    border-bottom: 2px solid #6b2737; padding-bottom: 16px; margin-bottom: 8px;\">\n    Sélection culturelle\n  </h1>\n  <p style=\"font-family: Georgia, serif; font-size: 13px; color: #7a6a5a; margin: 0 0 40px 0;\">\n    ${ville} — ${categorie} — ${style}\n  </p>\n  ${eventsHTML}\n  <p style=\"font-family: Georgia, serif; font-size: 12px; color: #aaa;\n    border-top: 1px solid #e0d6c8; padding-top: 24px; margin-top: 8px;\">\n    Sélection générée le ${ new Date().toLocaleDateString('fr-FR') }\n  </p>\n</div>\n`;\n\nreturn [{ json: { \n  html, \n  email: $('Field Mapping').first().json['Email']\n}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1136,
+        -16
+      ],
+      "id": "314bbac3-9326-4101-9671-c1cba28c7a16",
+      "name": "Build HTML Email"
+    },
+    {
+      "parameters": {
+        "jsCode": "const events = $input.first().json._embedded?.events || [];\n\n// Dédupliquer par titre\nconst seen = new Set();\nconst unique = events.filter(event => {\n  if (seen.has(event.name)) return false;\n  seen.add(event.name);\n  return true;\n});\n\n// Garder seulement les 5 premiers\nconst top5 = unique.slice(0, 5);\n\nreturn top5.map(event => ({\n  json: {\n    titre: event.name,\n    dates: event.dates?.start?.localDate || 'Dates not specified',\n    lieu: event._embedded?.venues?.[0]?.name || 'Venue not specified',\n    adresse: event._embedded?.venues?.[0]?.address?.line1 || '',\n    ville: event._embedded?.venues?.[0]?.city?.name || '',\n    lien: event.url || '',\n    image: event.images?.[0]?.url || '',\n    categorie: $('Field Mapping').first().json['Category'],\n    style: $('Field Mapping').first().json['Style'] || 'all styles'\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        464,
+        -16
+      ],
+      "id": "c9f960c4-22c9-4594-82c6-3853e6f352df",
+      "name": "Format Ticketmaster Data"
+    },
+    {
+      "parameters": {
+        "jsCode": "const evenements = $input.first().json.evenements;\nconst style = $('Field Mapping').first().json['Style'] || 'all styles';\nconst categorie = $('Field Mapping').first().json['Category'];\n\nconst liste = evenements.map((e, i) => \n  `${i+1}. Title: ${e.titre} | Venue: ${e.lieu} | Address: ${e.adresse} | City: ${e.ville} | Dates: ${e.dates}`\n).join('\\n');\n\nreturn [{ json: { liste, style, categorie } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        -16
+      ],
+      "id": "e78d3e13-089a-4969-b2f3-68c5c2efdb50",
+      "name": "Prepare Gemini Prompt"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c94bd5ea-ab62-436d-a067-01af55f8e5be",
+              "name": "City",
+              "value": "={{ $json[\"What town do you live in?\"] }}",
+              "type": "string"
+            },
+            {
+              "id": "265dc537-a52c-420c-b275-418d1090bcdf",
+              "name": "Category",
+              "value": "={{ $json[\"What are you looking for?\"] }}",
+              "type": "string"
+            },
+            {
+              "id": "90f6106a-c91e-4901-8972-e80b620263ef",
+              "name": "Style",
+              "value": "={{ $json[\"Please specify your style (e.g. Cubism, jazz, contemporary...)\"] }}",
+              "type": "string"
+            },
+            {
+              "id": "98f621cd-df87-4fc9-a19b-06ee430f49e8",
+              "name": "Email",
+              "value": "={{ $json.Email }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        80,
+        -16
+      ],
+      "id": "7e2bfb84-69e9-46e5-94f8-cba335ab28c9",
+      "name": "Field Mapping"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "GET Tickemaster API": {
+      "main": [
+        [
+          {
+            "node": "Format Ticketmaster Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate": {
+      "main": [
+        [
+          {
+            "node": "Prepare Gemini Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Form Trigger": {
+      "main": [
+        [
+          {
+            "node": "Field Mapping",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini AI": {
+      "main": [
+        [
+          {
+            "node": "Build HTML Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build HTML Email": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Ticketmaster Data": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Gemini Prompt": {
+      "main": [
+        [
+          {
+            "node": "Gemini AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Field Mapping": {
+      "main": [
+        [
+          {
+            "node": "GET Tickemaster API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "cb3e9769-655c-4abc-bd28-8446f382c9ea",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "05c24edf5821a9675e39427ae776bc9b94de9532e98d57927e87d31c9cbf948e"
+  },
+  "id": "YTCcRGEZquUKFwCP",
+  "tags": []
+}
